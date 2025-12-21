@@ -1,0 +1,27 @@
+{
+  "execution_config": {
+    "workers": true,
+    "minions": [
+      {
+        "name": "cot",
+        "count": 2,
+        "weight": 1,
+        "post_processing": "extract_number"
+      },
+      {
+        "name": "math_plan",
+        "count": 1,
+        "weight": 1,
+        "post_processing": "extract_number"
+      }
+    ],
+    "aggregator": {
+      "name": "majority_voting"
+    },
+    "short_circuit": true
+  },
+  "check": 1,
+  "post_processing": "extract_number",
+  "dataset": "gsm8k",
+  "dataset_description": "GSM8K (Grade School Math 8K) is a dataset of 8.5K high quality linguistically diverse grade school math word problems. The dataset was created to support research into language model approaches to question answering on mathematical problems."
+}

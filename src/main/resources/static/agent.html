@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minion Agent - 流式分析</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        :root {
+            --primary-color: #6366f1;
+            --primary-hover: #4f46e5;
+            --bg-dark: #0f172a;
+            --bg-card: #1e293b;
+            --bg-input: #334155;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border-color: #475569;
+            --success-color: #22c55e;
+            --error-color: #ef4444;
+            --warning-color: #f59e0b;
+            --info-color: #3b82f6;
+            --accent-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        }
+        
+        body {
+            font-family: 'Segoe UI', 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
+            background: var(--accent-gradient);
+            padding: 1.5rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 20px rgba(99, 102, 241, 0.3);
+        }
+        
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .header-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+            opacity: 0.9;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--success-color);
+            animation: pulse 2s infinite;
+        }
+        
+        .status-dot.processing {
+            background: var(--warning-color);
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .main-container {
+            flex: 1;
+            display: flex;
+            max-width: 1400px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 1.5rem;
+            gap: 1.5rem;
+        }
+        
+        .chat-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: var(--bg-card);
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        .sidebar {
+            width: 320px;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        
+        .sidebar-card {
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 1.25rem;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        .sidebar-card h3 {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        
+        /* 聊天消息区域 */
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        
+        .message {
+            display: flex;
+            gap: 0.75rem;
+            max-width: 90%;
+            animation: fadeIn 0.3s ease;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .message.user {
+            margin-left: auto;
+            flex-direction: row-reverse;
+        }
+        
+        .message-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            flex-shrink: 0;
+        }
+        
+        .message.user .message-avatar {
+            background: var(--primary-color);
+        }
+        
+        .message.assistant .message-avatar {
+            background: var(--accent-gradient);
+        }
+        
+        .message-content {
+            background: var(--bg-input);
+            padding: 0.875rem 1rem;
+            border-radius: 12px;
+            line-height: 1.6;
+        }
+        
+        .message.user .message-content {
+            background: var(--primary-color);
+            border-bottom-right-radius: 4px;
+        }
+        
+        .message.assistant .message-content {
+            border-bottom-left-radius: 4px;
+        }
+        
+        /* 流式处理步骤样式 */
+        .stream-step {
+            background: var(--bg-dark);
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            margin: 0.5rem 0;
+            border-left: 3px solid var(--border-color);
+        }
+        
+        .stream-step.step-start {
+            border-left-color: var(--info-color);
+            background: rgba(59, 130, 246, 0.1);
+        }
+        
+        .stream-step.thought {
+            border-left-color: var(--warning-color);
+            background: rgba(245, 158, 11, 0.1);
+        }
+        
+        .stream-step.code {
+            border-left-color: var(--primary-color);
+            background: rgba(99, 102, 241, 0.1);
+        }
+        
+        .stream-step.tool-call {
+            border-left-color: #8b5cf6;
+            background: rgba(139, 92, 246, 0.1);
+        }
+        
+        .stream-step.observation {
+            border-left-color: var(--success-color);
+            background: rgba(34, 197, 94, 0.1);
+        }
+        
+        .stream-step.error {
+            border-left-color: var(--error-color);
+            background: rgba(239, 68, 68, 0.1);
+        }
+        
+        .stream-step.final-answer {
+            border-left-color: var(--success-color);
+            background: rgba(34, 197, 94, 0.15);
+            border-width: 4px;
+        }
+        
+        .stream-step-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .stream-step-content {
+            font-size: 0.9rem;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        
+        .stream-step-content code {
+            background: var(--bg-card);
+            padding: 0.125rem 0.375rem;
+            border-radius: 4px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.85em;
+        }
+        
+        .stream-step-content pre {
+            background: var(--bg-card);
+            padding: 0.75rem;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 0.5rem 0;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.85rem;
+        }
+        
+        /* 输入区域 */
+        .input-area {
+            padding: 1rem 1.5rem;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            gap: 0.75rem;
+            align-items: flex-end;
+        }
+        
+        .input-wrapper {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        
+        .input-wrapper textarea {
+            width: 100%;
+            padding: 0.875rem 1rem;
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            color: var(--text-primary);
+            font-size: 0.9375rem;
+            resize: none;
+            min-height: 50px;
+            max-height: 150px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        
+        .input-wrapper textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+        }
+        
+        .send-btn {
+            padding: 0.875rem 1.5rem;
+            background: var(--accent-gradient);
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .send-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+        }
+        
+        .send-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .stop-btn {
+            padding: 0.875rem 1.5rem;
+            background: var(--error-color);
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            display: none;
+        }
+        
+        .stop-btn.visible {
+            display: flex;
+        }
+        
+        /* 文件上传区域 */
+        .upload-zone {
+            border: 2px dashed var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .upload-zone:hover, .upload-zone.dragover {
+            border-color: var(--primary-color);
+            background: rgba(99, 102, 241, 0.1);
+        }
+        
+        .upload-zone input {
+            display: none;
+        }
+        
+        .upload-icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .upload-text {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+        
+        .upload-text strong {
+            color: var(--primary-color);
+        }
+        
+        /* 已上传文件列表 */
+        .file-list {
+            margin-top: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        
+        .file-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            background: var(--bg-input);
+            border-radius: 8px;
+            font-size: 0.875rem;
+        }
+        
+        .file-item .file-icon {
+            color: var(--primary-color);
+        }
+        
+        .file-item .file-name {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .file-item .file-remove {
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 0.25rem;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+        
+        .file-item .file-remove:hover {
+            color: var(--error-color);
+            background: rgba(239, 68, 68, 0.1);
+        }
+        
+        /* 快速操作按钮 */
+        .quick-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+        
+        .quick-action-btn {
+            padding: 0.5rem 0.75rem;
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .quick-action-btn:hover {
+            background: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+        
+        /* 技能列表 */
+        .skill-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        
+        .skill-tag {
+            padding: 0.375rem 0.75rem;
+            background: var(--bg-input);
+            border-radius: 20px;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .skill-tag:hover {
+            background: var(--primary-color);
+            color: white;
+        }
+        
+        /* 操作按钮 */
+        .action-buttons {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .action-btn {
+            flex: 1;
+            padding: 0.625rem;
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .action-btn:hover {
+            background: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+        
+        .action-btn.danger:hover {
+            background: var(--error-color);
+            border-color: var(--error-color);
+        }
+        
+        /* 进度指示器 */
+        .progress-indicator {
+            display: none;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: rgba(99, 102, 241, 0.1);
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+        }
+        
+        .progress-indicator.visible {
+            display: flex;
+        }
+        
+        .progress-spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--primary-color);
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        /* 响应式 */
+        @media (max-width: 900px) {
+            .main-container {
+                flex-direction: column;
+            }
+            .sidebar {
+                width: 100%;
+                flex-direction: row;
+                flex-wrap: wrap;
+            }
+            .sidebar-card {
+                flex: 1;
+                min-width: 280px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <h1>🤖 Minion Agent <span style="font-weight: 400; opacity: 0.8;">流式分析</span></h1>
+        <div class="header-status">
+            <span class="status-dot" id="statusDot"></span>
+            <span id="statusText">Ready</span>
+        </div>
+    </header>
+    
+    <div class="main-container">
+        <div class="chat-panel">
+            <div class="chat-messages" id="chatMessages">
+                <div class="message assistant">
+                    <div class="message-avatar">🤖</div>
+                    <div class="message-content">
+                        你好！我是 Minion Agent，一个支持<strong>流式输出</strong>的智能助手。<br><br>
+                        📁 <strong>上传文件</strong>：在右侧上传你要分析的文件<br>
+                        💬 <strong>提问分析</strong>：输入"分析一下文件"或其他问题<br>
+                        👁️ <strong>实时查看</strong>：你会看到 Thought → Code → Observation 的完整处理过程<br><br>
+                        试试上传一个文件，然后让我来分析吧！
+                    </div>
+                </div>
+            </div>
+            
+            <div class="input-area">
+                <div class="input-wrapper">
+                    <div class="progress-indicator" id="progressIndicator">
+                        <div class="progress-spinner"></div>
+                        <span id="progressText">处理中...</span>
+                    </div>
+                    <textarea id="messageInput" placeholder="输入你的问题... (Shift+Enter 发送)" rows="1"></textarea>
+                    <div class="quick-actions">
+                        <button class="quick-action-btn" onclick="sendQuickMessage('分析一下上传的文件')">📊 分析文件</button>
+                        <button class="quick-action-btn" onclick="sendQuickMessage('总结文件的主要内容')">📝 总结内容</button>
+                        <button class="quick-action-btn" onclick="sendQuickMessage('提取文件中的关键数据')">🔍 提取数据</button>
+                        <button class="quick-action-btn" onclick="sendQuickMessage('生成文件的统计报告')">📈 统计报告</button>
+                    </div>
+                </div>
+                <button class="send-btn" id="sendBtn" onclick="sendMessageStream()">
+                    发送 ▶
+                </button>
+                <button class="stop-btn" id="stopBtn" onclick="stopStream()">
+                    停止 ⏹
+                </button>
+            </div>
+        </div>
+        
+        <div class="sidebar">
+            <!-- 文件上传 -->
+            <div class="sidebar-card">
+                <h3>📁 文件上传</h3>
+                <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+                    <input type="file" id="fileInput" multiple accept=".pdf,.docx,.txt,.xlsx,.xls,.csv,.json,.md,.py,.java,.js,.xml,.yaml,.yml,.html,.css">
+                    <div class="upload-icon">📤</div>
+                    <div class="upload-text">
+                        <strong>点击上传</strong> 或拖拽文件到这里<br>
+                        支持 PDF, Excel, Word, 文本, 代码等
+                    </div>
+                </div>
+                <div class="file-list" id="fileList"></div>
+            </div>
+            
+            <!-- 可用技能 -->
+            <div class="sidebar-card">
+                <h3>🛠️ 可用技能</h3>
+                <div class="skill-list" id="skillList">
+                    <span class="skill-tag" onclick="useSkill('xlsx')">📊 xlsx</span>
+                    <span class="skill-tag" onclick="useSkill('docx')">📝 docx</span>
+                    <span class="skill-tag" onclick="useSkill('pdf')">📄 pdf</span>
+                    <span class="skill-tag" onclick="useSkill('pptx')">📽️ pptx</span>
+                    <span class="skill-tag" onclick="useSkill('canvas-design')">🎨 canvas</span>
+                    <span class="skill-tag" onclick="useSkill('frontend-design')">🌐 frontend</span>
+                </div>
+            </div>
+            
+            <!-- 操作 -->
+            <div class="sidebar-card">
+                <h3>⚙️ 操作</h3>
+                <div class="action-buttons">
+                    <button class="action-btn" onclick="clearChat()">清空对话</button>
+                    <button class="action-btn danger" onclick="resetAgent()">重置Agent</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const API_BASE = '/api/agent';
+        const STREAM_API = '/api/agent/stream';
+        let sessionId = 'session_' + Date.now();
+        let uploadedFiles = [];
+        let isProcessing = false;
+        let eventSource = null;
+        let currentStreamMessageDiv = null;
+        
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            setupFileUpload();
+            setupTextarea();
+            checkHealth();
+        });
+        
+        // 设置文件上传
+        function setupFileUpload() {
+            const uploadZone = document.getElementById('uploadZone');
+            const fileInput = document.getElementById('fileInput');
+            
+            // 拖拽事件
+            uploadZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadZone.classList.add('dragover');
+            });
+            
+            uploadZone.addEventListener('dragleave', () => {
+                uploadZone.classList.remove('dragover');
+            });
+            
+            uploadZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadZone.classList.remove('dragover');
+                const files = e.dataTransfer.files;
+                uploadFiles(files);
+            });
+            
+            // 文件选择
+            fileInput.addEventListener('change', () => {
+                uploadFiles(fileInput.files);
+                fileInput.value = '';
+            });
+        }
+        
+        // 上传文件
+        async function uploadFiles(files) {
+            for (const file of files) {
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('sessionId', sessionId);
+                
+                try {
+                    const response = await fetch(`${API_BASE}/upload`, {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        uploadedFiles.push({
+                            name: result.originalName || file.name,
+                            path: result.filePath
+                        });
+                        updateFileList();
+                        addSystemMessage(`✅ 文件已上传: ${result.originalName || file.name}`);
+                    } else {
+                        addSystemMessage(`❌ 上传失败: ${result.message || result.error}`);
+                    }
+                } catch (error) {
+                    addSystemMessage(`❌ 上传错误: ${error.message}`);
+                }
+            }
+        }
+        
+        // 更新文件列表
+        function updateFileList() {
+            const fileList = document.getElementById('fileList');
+            fileList.innerHTML = uploadedFiles.map((file, index) => `
+                <div class="file-item">
+                    <span class="file-icon">📎</span>
+                    <span class="file-name" title="${file.path}">${file.name}</span>
+                    <span class="file-remove" onclick="removeFile(${index})">✕</span>
+                </div>
+            `).join('');
+        }
+        
+        // 移除文件
+        function removeFile(index) {
+            uploadedFiles.splice(index, 1);
+            updateFileList();
+        }
+        
+        // 设置文本框
+        function setupTextarea() {
+            const textarea = document.getElementById('messageInput');
+            
+            textarea.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && e.shiftKey) {
+                    e.preventDefault();
+                    sendMessageStream();
+                }
+            });
+            
+            textarea.addEventListener('input', () => {
+                textarea.style.height = 'auto';
+                textarea.style.height = Math.min(textarea.scrollHeight, 150) + 'px';
+            });
+        }
+        
+        // 快速发送消息
+        function sendQuickMessage(message) {
+            document.getElementById('messageInput').value = message;
+            sendMessageStream();
+        }
+        
+        // 使用流式接口发送消息
+        function sendMessageStream() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            
+            if (!message || isProcessing) return;
+            
+            isProcessing = true;
+            setProcessingState(true);
+            
+            // 添加用户消息
+            addMessage('user', message);
+            input.value = '';
+            input.style.height = 'auto';
+            
+            // 创建 Agent 响应消息容器
+            currentStreamMessageDiv = createStreamMessageContainer();
+            
+            // 构建 SSE URL
+            const url = `${STREAM_API}/chat?message=${encodeURIComponent(message)}&sessionId=${sessionId}&maxSteps=10`;
+            
+            // 创建 EventSource 连接
+            eventSource = new EventSource(url);
+            
+            // 处理各种事件类型
+            eventSource.addEventListener('step_start', (e) => {
+                const chunk = JSON.parse(e.data);
+                appendStreamStep('step-start', '📍 步骤开始', chunk.content);
+                updateProgress(chunk.content);
+            });
+            
+            eventSource.addEventListener('thought', (e) => {
+                const chunk = JSON.parse(e.data);
+                appendStreamStep('thought', '💭 思考', chunk.content);
+                updateProgress('思考中...');
+            });
+            
+            eventSource.addEventListener('llm_output', (e) => {
+                const chunk = JSON.parse(e.data);
+                appendStreamStep('thought', '🧠 推理', chunk.content);
+            });
+            
+            eventSource.addEventListener('code_execution', (e) => {
+                const chunk = JSON.parse(e.data);
+                const content = `<pre>${escapeHtml(chunk.content)}</pre>`;
+                appendStreamStep('code', '💻 代码执行', content, true);
+                updateProgress('执行代码...');
+            });
+            
+            eventSource.addEventListener('tool_call', (e) => {
+                const chunk = JSON.parse(e.data);
+                appendStreamStep('tool-call', `🔧 调用工具: ${chunk.toolName || ''}`, chunk.content);
+                updateProgress(`调用工具: ${chunk.toolName || ''}`);
+            });
+            
+            eventSource.addEventListener('tool_response', (e) => {
+                const chunk = JSON.parse(e.data);
+                appendStreamStep('observation', `📥 工具返回: ${chunk.toolName || ''}`, chunk.content);
+            });
+            
+            eventSource.addEventListener('observation', (e) => {
+                const chunk = JSON.parse(e.data);
+                const className = chunk.success ? 'observation' : 'error';
+                const icon = chunk.success ? '👀' : '❌';
+                appendStreamStep(className, `${icon} 观察结果`, chunk.content);
+            });
+            
+            eventSource.addEventListener('skill_loading', (e) => {
+                const chunk = JSON.parse(e.data);
+                appendStreamStep('tool-call', '🎯 加载技能', chunk.content);
+                updateProgress('加载技能...');
+            });
+            
+            eventSource.addEventListener('step_end', (e) => {
+                const chunk = JSON.parse(e.data);
+                appendStreamStep('step-start', '✅ 步骤完成', chunk.content);
+            });
+            
+            eventSource.addEventListener('error', (e) => {
+                if (e.data) {
+                    const chunk = JSON.parse(e.data);
+                    appendStreamStep('error', '❌ 错误', chunk.content || chunk.error);
+                }
+            });
+            
+            eventSource.addEventListener('final_answer', (e) => {
+                const chunk = JSON.parse(e.data);
+                appendStreamStep('final-answer', '🎉 最终答案', chunk.content);
+                finishStream();
+            });
+            
+            // 通用消息处理
+            eventSource.onmessage = (e) => {
+                try {
+                    const chunk = JSON.parse(e.data);
+                    if (chunk.chunkType === 'FINAL_ANSWER') {
+                        appendStreamStep('final-answer', '🎉 最终答案', chunk.content);
+                        finishStream();
+                    } else if (!chunk.chunkType || chunk.chunkType === 'TEXT') {
+                        appendStreamStep('thought', '💬', chunk.content);
+                    }
+                } catch (err) {
+                    console.log('Raw message:', e.data);
+                }
+            };
+            
+            // 错误处理
+            eventSource.onerror = (e) => {
+                console.error('SSE Error:', e);
+                if (eventSource.readyState === EventSource.CLOSED) {
+                    finishStream();
+                } else {
+                    // 连接错误但未关闭，可能是超时
+                    appendStreamStep('error', '⚠️ 连接问题', '连接中断，请重试');
+                    finishStream();
+                }
+            };
+        }
+        
+        // 创建流式消息容器
+        function createStreamMessageContainer() {
+            const messagesDiv = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message assistant';
+            messageDiv.innerHTML = `
+                <div class="message-avatar">🤖</div>
+                <div class="message-content" id="streamContent">
+                    <div class="stream-steps"></div>
+                </div>
+            `;
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            return messageDiv;
+        }
+        
+        // 添加流式步骤
+        function appendStreamStep(className, header, content, isHtml = false) {
+            if (!currentStreamMessageDiv) return;
+            
+            const stepsContainer = currentStreamMessageDiv.querySelector('.stream-steps');
+            const stepDiv = document.createElement('div');
+            stepDiv.className = `stream-step ${className}`;
+            
+            const displayContent = isHtml ? content : escapeHtml(content);
+            
+            stepDiv.innerHTML = `
+                <div class="stream-step-header">${header}</div>
+                <div class="stream-step-content">${displayContent}</div>
+            `;
+            
+            stepsContainer.appendChild(stepDiv);
+            
+            // 滚动到底部
+            const messagesDiv = document.getElementById('chatMessages');
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+        
+        // 完成流式传输
+        function finishStream() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
+            isProcessing = false;
+            currentStreamMessageDiv = null;
+            setProcessingState(false);
+        }
+        
+        // 停止流式传输
+        function stopStream() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+                appendStreamStep('error', '⏹ 已停止', '用户终止了处理');
+            }
+            finishStream();
+        }
+        
+        // 设置处理状态
+        function setProcessingState(processing) {
+            document.getElementById('sendBtn').style.display = processing ? 'none' : 'flex';
+            document.getElementById('stopBtn').classList.toggle('visible', processing);
+            document.getElementById('statusDot').classList.toggle('processing', processing);
+            document.getElementById('statusText').textContent = processing ? 'Processing...' : 'Ready';
+            document.getElementById('progressIndicator').classList.toggle('visible', processing);
+        }
+        
+        // 更新进度文本
+        function updateProgress(text) {
+            document.getElementById('progressText').textContent = text;
+        }
+        
+        // HTML 转义
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // 添加消息
+        function addMessage(role, content) {
+            const messagesDiv = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}`;
+            
+            const avatar = role === 'user' ? '👤' : '🤖';
+            
+            // 简单的Markdown处理
+            let formattedContent = escapeHtml(content)
+                .replace(/\n/g, '<br>');
+            
+            messageDiv.innerHTML = `
+                <div class="message-avatar">${avatar}</div>
+                <div class="message-content">${formattedContent}</div>
+            `;
+            
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+        
+        // 添加系统消息
+        function addSystemMessage(content) {
+            const messagesDiv = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message assistant';
+            messageDiv.innerHTML = `
+                <div class="message-avatar">📢</div>
+                <div class="message-content" style="font-size: 0.875rem; opacity: 0.8;">${escapeHtml(content)}</div>
+            `;
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+        
+        // 使用技能
+        function useSkill(skillName) {
+            const input = document.getElementById('messageInput');
+            input.value = `使用 ${skillName} 技能来帮我分析上传的文件`;
+            input.focus();
+        }
+        
+        // 清空对话
+        function clearChat() {
+            const messagesDiv = document.getElementById('chatMessages');
+            messagesDiv.innerHTML = `
+                <div class="message assistant">
+                    <div class="message-avatar">🤖</div>
+                    <div class="message-content">对话已清空。上传文件后问我问题吧！</div>
+                </div>
+            `;
+        }
+        
+        // 重置Agent
+        async function resetAgent() {
+            // 先停止任何进行中的流
+            stopStream();
+            
+            try {
+                const response = await fetch(`${API_BASE}/reset?sessionId=${sessionId}&clearFiles=true`, {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    uploadedFiles = [];
+                    updateFileList();
+                    clearChat();
+                    sessionId = 'session_' + Date.now();
+                    addSystemMessage('✅ Agent 已重置，可以开始新的分析');
+                }
+            } catch (error) {
+                addSystemMessage('❌ 重置失败: ' + error.message);
+            }
+        }
+        
+        // 健康检查
+        async function checkHealth() {
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                const result = await response.json();
+                
+                if (result.status === 'UP') {
+                    document.getElementById('statusText').textContent = 
+                        result.llmServiceAvailable ? 'Ready' : 'LLM Not Available';
+                }
+            } catch (error) {
+                document.getElementById('statusText').textContent = 'Disconnected';
+            }
+        }
+    </script>
+</body>
+</html>

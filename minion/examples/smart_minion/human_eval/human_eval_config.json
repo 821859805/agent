@@ -1,0 +1,16 @@
+{
+  "type": "ensemble",
+
+  "workers": [
+    {
+      "name": "python",
+      "count": 1,
+      "check": 10,
+      "check_route": "ldb_check",
+      "post_processing": "extract_python"
+    }
+  ],
+  "aggregator": {
+    "name": "majority_voting"
+  }
+}

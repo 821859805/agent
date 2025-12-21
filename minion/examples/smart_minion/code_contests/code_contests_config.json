@@ -1,0 +1,16 @@
+{
+  "type": "ensemble",
+  "pre_processing": ["problem_reflect","example_reasoning"],
+  "workers": [
+    {
+      "name": "python",
+      "count": 3,
+      "check": 1,
+      "check_route": "codium_check",
+      "post_processing": "extract_python"
+    }
+  ],
+  "result_strategy": {
+    "name": "codium"
+  }
+}

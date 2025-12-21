@@ -1,0 +1,13 @@
+{
+  "type": "ensemble",
+  "workers": [
+    {
+      "name": "raw",
+      "count": 1,
+      "check": 1
+    }
+  ],
+  "result_strategy": {
+    "name": "majority_voting"
+  }
+}
